@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Atomic Clipper",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Clip any web content into a local research library. Export to Markdown for NotebookLM, Perplexity, or any LLM.",
   "permissions": ["activeTab", "storage", "scripting"],
   "icons": {
