@@ -1,0 +1,64 @@
+/* Ensure HTML hidden attribute always wins */
+[hidden] { display: none !important; }
+
+body {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  margin: 0;
+  padding: 0;
+  color: #1a1a1a;
+}
+
+#app {
+  padding: 16px;
+}
+
+#start-clipping {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 16px;
+  background: #0a66c2;
+  color: #fff;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#start-clipping:hover {
+  background: #004182;
+}
+
+#unsupported-msg {
+  color: #666;
+  text-align: center;
+  margin: 8px 0;
+  line-height: 1.4;
+}
+
+footer {
+  border-top: 1px solid #eee;
+  padding: 8px 12px;
+}
+
+#open-library {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px;
+  border: 1px solid #0a66c2;
+  color: #0a66c2;
+  background: #f0f6ff;
+  font-family: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#open-library:hover {
+  background: #e0eeff;
+}
