@@ -1,12 +1,12 @@
 /* Highlight frame — outline avoids layout shift */
-.postscraper-highlight {
+.atomic-clipper-highlight {
   outline: 2px solid #0a66c2 !important;
   outline-offset: 2px !important;
   cursor: crosshair !important;
 }
 
 /* Inline save panel */
-#postscraper-panel {
+#atomic-clipper-panel {
   position: fixed;
   top: 16px;
   right: 16px;
@@ -22,14 +22,14 @@
   box-sizing: border-box;
 }
 
-#postscraper-panel * {
+#atomic-clipper-panel * {
   box-sizing: border-box;
   font-family: system-ui, sans-serif;
 }
 
 /* Success toast */
-#postscraper-toast,
-#postscraper-nav-toast {
+#atomic-clipper-toast,
+#atomic-clipper-nav-toast {
   position: fixed;
   top: 16px;
   right: 16px;
@@ -46,6 +46,6 @@
 }
 
 /* Navigation cancellation toast — orange distinguishes from blue success toast */
-#postscraper-nav-toast {
+#atomic-clipper-nav-toast {
   background: #e65100;
 }
