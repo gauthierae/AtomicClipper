@@ -14,6 +14,8 @@
   let state = 'PICKING';
   let currentHighlight = null;
   let cleaned = false;
+  let selectingUrl = '';
+  let selectingTitle = '';
 
   // --- AUTO-CLIP MODE ---
   if (window._atomicClipperAutoClip) {
@@ -51,6 +53,7 @@
     document.removeEventListener('mouseover', onMouseover);
     document.removeEventListener('click', onClick, true);
     document.removeEventListener('keydown', onKeydown);
+    document.removeEventListener('mouseup', onMouseup);
     window.removeEventListener('popstate', onNavigate);
     window.removeEventListener('hashchange', onNavigate);
   }
@@ -119,8 +122,6 @@
     e.preventDefault();
     e.stopPropagation();
 
-    state = 'SELECTED';
-
     // Freeze highlight
     document.removeEventListener('mouseover', onMouseover);
 
@@ -132,17 +133,43 @@
     const clipUrl = window.location.href;
     const clipTitle = document.title;
 
-    // Remove visual highlight and restore cursor
+    // Remove visual highlight
     if (currentHighlight) {
       currentHighlight.classList.remove('atomic-clipper-highlight');
       currentHighlight = null;
     }
-    document.body.style.cursor = '';
 
+    if (!extracted.text.trim()) {
+      // Empty extraction → SELECTING state: let user select text manually
+      state = 'SELECTING';
+      selectingUrl = clipUrl;
+      selectingTitle = clipTitle;
+      document.body.style.cursor = '';
+      document.removeEventListener('click', onClick, true);
+      document.addEventListener('mouseup', onMouseup);
+      showSelectHint();
+      return;
+    }
+
+    // Non-empty extraction → normal save flow
+    state = 'SELECTED';
+    document.body.style.cursor = '';
     showSavePanel(extracted.text, extracted.assets, clipUrl, clipTitle);
   }
 
   document.addEventListener('click', onClick, true);
+
+  // --- MOUSEUP FOR TEXT SELECTION (SELECTING state only) ---
+
+  function onMouseup() {
+    if (state !== 'SELECTING') return;
+    const sel = window.getSelection().toString().trim();
+    if (!sel) return; // empty selection — wait for next mouseup
+    document.removeEventListener('mouseup', onMouseup);
+    const hint = document.getElementById('atomic-clipper-select-hint');
+    if (hint) hint.remove();
+    showSavePanel(sel, [], selectingUrl, selectingTitle);
+  }
 
   // --- INLINE SAVE PANEL ---
 
@@ -407,6 +434,15 @@
       toast.style.opacity = '0';
       setTimeout(() => toast.remove(), 400);
     }, 1500);
+  }
+
+  // Selection fallback hint — persistent (no auto-hide); removed by onMouseup or cleanup()
+  function showSelectHint() {
+    const hint = document.createElement('div');
+    hint.id = 'atomic-clipper-select-hint';
+    hint.setAttribute('role', 'status'); // announces to screen readers (polite live region)
+    hint.textContent = "Couldn\u2019t extract \u2014 select text to clip";
+    document.body.appendChild(hint);
   }
 
   // Navigation cancellation toast — appended after cleanup() so it survives the sweep
