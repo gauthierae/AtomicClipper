@@ -2,15 +2,28 @@
   'use strict';
 
   // Guard against double-injection
-  if (document.querySelector('meta[name="postscraper-active"]')) return;
+  if (document.querySelector('meta[name="atomic-clipper-active"]')) {
+    window._atomicClipperAutoClip = false; // prevent stale flag if guard fires
+    return;
+  }
 
   const sentinel = document.createElement('meta');
-  sentinel.name = 'postscraper-active';
+  sentinel.name = 'atomic-clipper-active';
   document.head.appendChild(sentinel);
 
   let state = 'PICKING';
   let currentHighlight = null;
   let cleaned = false;
+
+  // --- AUTO-CLIP MODE ---
+  if (window._atomicClipperAutoClip) {
+    window._atomicClipperAutoClip = false;
+    document.addEventListener('keydown', onKeydown); // Esc closes save panel
+    const target = document.querySelector('article') || document.querySelector('main') || document.body;
+    const extracted = window._atomicClipperExtract(target);
+    showSavePanel(extracted.text, extracted.assets, window.location.href, document.title);
+    return; // skip PICKING phase — no cursor, no event listeners
+  }
 
   // --- CLEANUP ---
 
@@ -19,16 +32,16 @@
     cleaned = true;
 
     // Remove all injected elements
-    document.querySelectorAll('[id^="postscraper-"]').forEach(el => el.remove());
+    document.querySelectorAll('[id^="atomic-clipper-"]').forEach(el => el.remove());
 
     // Remove highlight
     if (currentHighlight) {
-      currentHighlight.classList.remove('postscraper-highlight');
+      currentHighlight.classList.remove('atomic-clipper-highlight');
       currentHighlight = null;
     }
 
     // Remove sentinel
-    const s = document.querySelector('meta[name="postscraper-active"]');
+    const s = document.querySelector('meta[name="atomic-clipper-active"]');
     if (s) s.remove();
 
     // Restore cursor
@@ -64,11 +77,11 @@
     if (!el) return true;
     if (el === document.documentElement) return true;
     if (el === document.body) return true;
-    if (el.id && el.id.startsWith('postscraper-')) return true;
+    if (el.id && el.id.startsWith('atomic-clipper-')) return true;
     // Check ancestors up to body
     let parent = el.parentElement;
     while (parent && parent !== document.body) {
-      if (parent.id && parent.id.startsWith('postscraper-')) return true;
+      if (parent.id && parent.id.startsWith('atomic-clipper-')) return true;
       parent = parent.parentElement;
     }
     return false;
@@ -79,9 +92,9 @@
     if (isOwnElement(e.target)) return;
 
     if (currentHighlight && currentHighlight !== e.target) {
-      currentHighlight.classList.remove('postscraper-highlight');
+      currentHighlight.classList.remove('atomic-clipper-highlight');
     }
-    e.target.classList.add('postscraper-highlight');
+    e.target.classList.add('atomic-clipper-highlight');
     currentHighlight = e.target;
   }
 
@@ -113,7 +126,7 @@
 
     // Extract content from selected element
     const selected = currentHighlight || e.target;
-    const extracted = window._postScraperExtract(selected);
+    const extracted = window._atomicClipperExtract(selected);
 
     // Capture page metadata
     const clipUrl = window.location.href;
@@ -121,7 +134,7 @@
 
     // Remove visual highlight and restore cursor
     if (currentHighlight) {
-      currentHighlight.classList.remove('postscraper-highlight');
+      currentHighlight.classList.remove('atomic-clipper-highlight');
       currentHighlight = null;
     }
     document.body.style.cursor = '';
@@ -149,7 +162,7 @@
         : clipText;
 
       const panel = document.createElement('div');
-      panel.id = 'postscraper-panel';
+      panel.id = 'atomic-clipper-panel';
 
       // Header
       const header = document.createElement('div');
@@ -166,7 +179,7 @@
 
       // Category label
       const label = document.createElement('label');
-      label.htmlFor = 'postscraper-category-input';
+      label.htmlFor = 'atomic-clipper-category-input';
       label.style.cssText = 'display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#333;';
       label.textContent = 'Category';
 
@@ -177,7 +190,7 @@
       // Category input
       const input = document.createElement('input');
       input.type = 'text';
-      input.id = 'postscraper-category-input';
+      input.id = 'atomic-clipper-category-input';
       input.placeholder = 'e.g. AI Research';
       input.style.cssText =
         'width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;' +
@@ -298,7 +311,7 @@
       btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
 
       const cancelBtn = document.createElement('button');
-      cancelBtn.id = 'postscraper-cancel';
+      cancelBtn.id = 'atomic-clipper-cancel';
       cancelBtn.type = 'button';
       cancelBtn.textContent = 'Cancel';
       cancelBtn.style.cssText =
@@ -306,7 +319,7 @@
         'border-radius:4px;cursor:pointer;font-size:14px;color:#333;';
 
       const saveBtn = document.createElement('button');
-      saveBtn.id = 'postscraper-save';
+      saveBtn.id = 'atomic-clipper-save';
       saveBtn.type = 'button';
       saveBtn.textContent = 'Save';
       saveBtn.style.cssText =
@@ -386,7 +399,7 @@
 
   function showToast(message) {
     const toast = document.createElement('div');
-    toast.id = 'postscraper-toast';
+    toast.id = 'atomic-clipper-toast';
     toast.textContent = message;
     document.body.appendChild(toast);
 
@@ -399,7 +412,7 @@
   // Navigation cancellation toast — appended after cleanup() so it survives the sweep
   function showNavToast(message) {
     const toast = document.createElement('div');
-    toast.id = 'postscraper-nav-toast';
+    toast.id = 'atomic-clipper-nav-toast';
     toast.textContent = message;
     document.body.appendChild(toast);
 

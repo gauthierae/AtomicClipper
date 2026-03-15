@@ -88,5 +88,5 @@
       : { text: element.innerText.trim(), assets };
   }
 
-  window._postScraperExtract = extract;
+  window._atomicClipperExtract = extract;
 })();

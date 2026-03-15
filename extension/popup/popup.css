@@ -34,6 +34,25 @@ body {
   background: #004182;
 }
 
+#clip-article {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 10px 16px;
+  background: #fff;
+  color: #0a66c2;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  border: 1px solid #0a66c2;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#clip-article:hover {
+  background: #f0f6ff;
+}
+
 #unsupported-msg {
   color: #666;
   text-align: center;
