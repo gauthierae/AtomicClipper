@@ -1,0 +1,51 @@
+/* Highlight frame — outline avoids layout shift */
+.postscraper-highlight {
+  outline: 2px solid #0a66c2 !important;
+  outline-offset: 2px !important;
+  cursor: crosshair !important;
+}
+
+/* Inline save panel */
+#postscraper-panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 320px;
+  z-index: 2147483647;
+  background: #fff;
+  border: 1px solid #0a66c2;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+#postscraper-panel * {
+  box-sizing: border-box;
+  font-family: system-ui, sans-serif;
+}
+
+/* Success toast */
+#postscraper-toast,
+#postscraper-nav-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: #0a66c2;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  z-index: 2147483647;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+/* Navigation cancellation toast — orange distinguishes from blue success toast */
+#postscraper-nav-toast {
+  background: #e65100;
+}
