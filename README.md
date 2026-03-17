@@ -2,7 +2,11 @@
 
 A Chrome extension that lets you clip any web content into a local research library — then export it as Markdown for NotebookLM, Perplexity, or any LLM.
 
+![Last Commit](https://img.shields.io/github/last-commit/gauthierae/AtomicClipper)
+
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg) 
+
+![Demo](assets/Atomic-Clipper-MiniDemo.gif)
 
 ## What it does
 
