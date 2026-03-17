@@ -53,8 +53,9 @@ function buildClipEl(clip, catClips) {
   badgeEl.className = 'category-badge';
   badgeEl.textContent = clip.category || 'Uncategorized';
 
-  // Excerpt
-  const excerpt = clip.text.length > 150 ? clip.text.slice(0, 150) + '…' : clip.text;
+  // Excerpt — null-safe: corrupted clip with text: null renders blank rather than crashing
+  const text = clip.text ?? '';
+  const excerpt = text.length > 150 ? text.slice(0, 150) + '…' : text;
   const excerptEl = document.createElement('p');
   excerptEl.className = 'clip-excerpt';
   excerptEl.textContent = excerpt;
@@ -63,7 +64,7 @@ function buildClipEl(clip, catClips) {
   const fullEl = document.createElement('p');
   fullEl.className = 'clip-full';
   fullEl.hidden = true;
-  fullEl.textContent = clip.text;
+  fullEl.textContent = text;
 
   // Actions
   const actionsEl = document.createElement('div');

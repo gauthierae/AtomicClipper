@@ -406,13 +406,15 @@
           scrapedAt: new Date().toISOString()
         };
 
-        // Fire-and-forget: handler added in Sprint 8
-        chrome.runtime.sendMessage({ action: 'saveClip', data: clip }, () => {
+        chrome.runtime.sendMessage({ action: 'saveClip', data: clip }, (response) => {
           void chrome.runtime.lastError;
+          cleanup();
+          if (response?.ok === false) {
+            showToast('Could not save \u2014 storage may be full.');
+          } else {
+            showToast('Clip saved!');
+          }
         });
-
-        cleanup();
-        showToast('Clip saved!');
       });
 
       // --- CANCEL ---

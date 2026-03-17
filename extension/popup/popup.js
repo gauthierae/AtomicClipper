@@ -27,6 +27,8 @@ document.getElementById('start-clipping').addEventListener('click', async () => 
       });
     } catch (err) {
       console.error('[Atomic Clipper] Injection failed:', err);
+      show('state-unsupported');
+      return;
     }
   }
   window.close();
@@ -42,6 +44,8 @@ document.getElementById('clip-article').addEventListener('click', async () => {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/picker.js'] });
     } catch (err) {
       console.error('[Atomic Clipper] Auto-clip failed:', err);
+      show('state-unsupported');
+      return;
     }
   }
   window.close();

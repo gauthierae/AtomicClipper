@@ -57,6 +57,9 @@ The export format is compatible with NotebookLM, Perplexity, and LLM context win
 - SPA navigation (React/Next.js/Vue) cancels the picker if the URL changes mid-session — a notice appears explaining why
 - Does not capture images inline; image URLs are stored in metadata only
 - May not clip correctly behind login walls or paywalls
+- **"Show full text" may appear truncated** — clicking the button in the library sometimes shows only a preview even after expanding. The full text is stored correctly and will appear in your exported `.md` file.
+- **Source links include a referrer** — when you click a "source" link in the library, the destination site may see that you came from the Atomic Clipper library page.
+- **Popup occasionally loads blank** — if the popup appears empty, close it and click the toolbar icon again. This is a rare Chrome extension timing issue.
 
 ## Privacy
 
