@@ -1,5 +1,5 @@
 import { getAllClips, deleteClip } from '../shared/storage.js';
-import { generateMarkdown, sanitizeFilename } from '../shared/markdown.js';
+import { generateMarkdown, sanitizeFilename, formatClipBlock, isHttpUrl } from '../shared/markdown.js';
 
 function getDomain(url) {
   try { return new URL(url).hostname; } catch { return url; }
@@ -22,6 +22,55 @@ function downloadMarkdown(category, clips) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function showErrorToast(msg) {
+  const toast = document.createElement('div');
+  toast.className = 'copy-error-toast';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+async function copyClipMd(clip, btn) {
+  try {
+    await navigator.clipboard.writeText(formatClipBlock(clip));
+    btn.textContent = 'Copied!';
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = 'Copy MD';
+      btn.disabled = false;
+    }, 1500);
+  } catch {
+    showErrorToast('Could not copy to clipboard.');
+  }
+}
+
+// Thumbnail for an image-only clip. On load error, fall back to a link (http(s) only —
+// a javascript:/data: asset URL must never become a clickable href in this privileged page)
+// or a plain text marker.
+function buildThumb(url) {
+  const img = document.createElement('img');
+  img.className = 'clip-thumb';
+  img.src = url;
+  img.alt = '';
+  img.loading = 'lazy';
+  img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', () => {
+    let fallback;
+    if (isHttpUrl(url)) {
+      fallback = document.createElement('a');
+      fallback.href = url;
+      fallback.target = '_blank';
+      fallback.rel = 'noopener noreferrer';
+    } else {
+      fallback = document.createElement('span');
+    }
+    fallback.className = 'clip-thumb-fallback';
+    fallback.textContent = '(image unavailable)';
+    img.replaceWith(fallback);
+  });
+  return img;
 }
 
 function buildClipEl(clip, catClips) {
@@ -55,16 +104,29 @@ function buildClipEl(clip, catClips) {
 
   // Excerpt — null-safe: corrupted clip with text: null renders blank rather than crashing
   const text = clip.text ?? '';
+  const assets = Array.isArray(clip.assets) ? clip.assets : [];
+  const isImageOnly = !text.trim() && assets.length > 0;
   const excerpt = text.length > 150 ? text.slice(0, 150) + '…' : text;
   const excerptEl = document.createElement('p');
   excerptEl.className = 'clip-excerpt';
-  excerptEl.textContent = excerpt;
 
   // Full text (hidden by default)
   const fullEl = document.createElement('p');
   fullEl.className = 'clip-full';
   fullEl.hidden = true;
-  fullEl.textContent = text;
+
+  if (isImageOnly) {
+    // Collapsed: caption + first thumbnail. Expanded: all thumbnails.
+    const cap = document.createElement('span');
+    cap.className = 'clip-thumb-caption';
+    cap.textContent = assets.length === 1 ? 'Image clip' : `Image clip · ${assets.length} images`;
+    excerptEl.appendChild(cap);
+    excerptEl.appendChild(buildThumb(assets[0]));
+    for (const url of assets) fullEl.appendChild(buildThumb(url));
+  } else {
+    excerptEl.textContent = excerpt;
+    fullEl.textContent = text;
+  }
 
   // Actions
   const actionsEl = document.createElement('div');
@@ -74,7 +136,13 @@ function buildClipEl(clip, catClips) {
   toggleBtn.className = 'toggle-btn';
   toggleBtn.textContent = 'Show full text';
 
+  const copyMdBtn = document.createElement('button');
+  copyMdBtn.className = 'copy-md-btn';
+  copyMdBtn.textContent = 'Copy MD';
+  copyMdBtn.addEventListener('click', () => copyClipMd(clip, copyMdBtn));
+
   actionsEl.appendChild(toggleBtn);
+  actionsEl.appendChild(copyMdBtn);
 
   // Source link (hidden by default — shown only in expanded view)
   const sourceLink = document.createElement('a');
