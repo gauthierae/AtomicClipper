@@ -17,6 +17,12 @@
   let selectingUrl = '';
   let selectingTitle = '';
 
+  // --- MULTI-BLOCK SELECTION (Sprint 18) ---
+  const pendingBlocks = [];                                   // [{ text, assets }]
+  const isMac = /Mac/i.test(navigator.platform || navigator.userAgent || '');
+  function isAccel(e) { return isMac ? e.metaKey : e.ctrlKey; }         // modifier currently held?
+  function isAccelKey(e) { return isMac ? e.key === 'Meta' : e.key === 'Control'; } // the released key
+
   // --- AUTO-CLIP MODE ---
   if (window._atomicClipperAutoClip) {
     window._atomicClipperAutoClip = false;
@@ -54,6 +60,7 @@
     document.removeEventListener('click', onClick, true);
     document.removeEventListener('keydown', onKeydown);
     document.removeEventListener('mouseup', onMouseup);
+    document.removeEventListener('keyup', onKeyup);
     window.removeEventListener('popstate', onNavigate);
     window.removeEventListener('hashchange', onNavigate);
   }
@@ -117,63 +124,234 @@
 
   function onClick(e) {
     if (state !== 'PICKING') return;
-    if (isOwnElement(e.target)) return;
+    if (isOwnElement(e.target)) return;          // tray + buttons are own elements → ignored here
 
     e.preventDefault();
-    e.stopPropagation();
+    e.stopPropagation();                          // keeps suppressing browser Cmd/Ctrl+click new-tab
 
-    // Freeze highlight
-    document.removeEventListener('mouseover', onMouseover);
-
-    // Extract content from selected element
     const selected = currentHighlight || e.target;
     const extracted = window._atomicClipperExtract(selected);
+    const hasContent = !!extracted.text.trim() ||
+                       (Array.isArray(extracted.assets) && extracted.assets.length > 0);
 
-    // Capture page metadata
-    const clipUrl = window.location.href;
-    const clipTitle = document.title;
-
-    // Remove visual highlight
-    if (currentHighlight) {
-      currentHighlight.classList.remove('atomic-clipper-highlight');
-      currentHighlight = null;
+    // --- ACCUMULATE (modifier held) ---
+    if (isAccel(e)) {
+      if (!hasContent) return;                    // ignore empty pick; never enter SELECTING while accumulating
+      addBlock(extracted);
+      flashPick(selected);
+      if (currentHighlight) { currentHighlight.classList.remove('atomic-clipper-highlight'); currentHighlight = null; }
+      showPendingTray();
+      return;                                     // stay PICKING; mouseover + keyup still attached
     }
 
-    if (!extracted.text.trim()) {
-      // Empty extraction → SELECTING state: let user select text manually
+    // --- PLAIN pick (no modifier) ---
+    // Freeze highlight (only on the plain branch — accumulation keeps mouseover live)
+    document.removeEventListener('mouseover', onMouseover);
+    if (currentHighlight) { currentHighlight.classList.remove('atomic-clipper-highlight'); currentHighlight = null; }
+
+    if (pendingBlocks.length > 0) { finalize(); return; }   // key already released; finish (do NOT add the stray click)
+
+    // No pending → existing single-block behavior, verbatim
+    const clipUrl = window.location.href;
+    const clipTitle = document.title;
+    if (!hasContent) {
+      // Empty extraction with no assets → SELECTING state: let user select text manually.
+      // (An image-only element has empty text but a populated assets[]; it falls through to save.)
       state = 'SELECTING';
       selectingUrl = clipUrl;
       selectingTitle = clipTitle;
       document.body.style.cursor = '';
       document.removeEventListener('click', onClick, true);
-      document.addEventListener('mouseup', onMouseup);
       showSelectHint();
       return;
     }
-
-    // Non-empty extraction → normal save flow
     state = 'SELECTED';
     document.body.style.cursor = '';
     showSavePanel(extracted.text, extracted.assets, clipUrl, clipTitle);
   }
 
   document.addEventListener('click', onClick, true);
+  document.addEventListener('mouseup', onMouseup);
 
-  // --- MOUSEUP FOR TEXT SELECTION (SELECTING state only) ---
+  // --- RELEASE-TO-FINALIZE (Sprint 18) ---
 
-  function onMouseup() {
-    if (state !== 'SELECTING') return;
-    const sel = window.getSelection().toString().trim();
-    if (!sel) return; // empty selection — wait for next mouseup
-    document.removeEventListener('mouseup', onMouseup);
-    const hint = document.getElementById('atomic-clipper-select-hint');
-    if (hint) hint.remove();
-    showSavePanel(sel, [], selectingUrl, selectingTitle);
+  function onKeyup(e) {
+    if (state !== 'PICKING') return;
+    if (!isAccelKey(e)) return;                 // only the accel key release matters
+    if (pendingBlocks.length > 0) finalize();   // release with picks → save panel; else no-op
+  }
+
+  document.addEventListener('keyup', onKeyup);
+
+  // --- MOUSEUP FOR DRAG-SELECT (PICKING) AND TEXT SELECTION (SELECTING) ---
+
+  function extractFromSelection(selection) {
+    try {
+      const fragment = selection.getRangeAt(0).cloneContents();
+      return window._atomicClipperExtractFragment(fragment);
+    } catch (_e) {
+      return { text: selection.toString().trim(), assets: [] };
+    }
+  }
+
+  function onMouseup(e) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+
+    if (state === 'PICKING') {
+      const extracted = extractFromSelection(selection);
+
+      if (isAccel(e)) {                                   // modifier+drag → accumulate
+        if (!extracted.text.trim()) { selection.removeAllRanges(); return; }   // text-gated
+        addBlock(extracted);
+        selection.removeAllRanges();                      // clear stray browser selection
+        if (currentHighlight) { currentHighlight.classList.remove('atomic-clipper-highlight'); currentHighlight = null; }
+        showPendingTray();
+        return;
+      }
+
+      if (!extracted.text.trim()) return; // trivial selection — let onClick handle it
+      document.removeEventListener('mouseover', onMouseover);
+      if (currentHighlight) {
+        currentHighlight.classList.remove('atomic-clipper-highlight');
+        currentHighlight = null;
+      }
+      selection.removeAllRanges();
+      if (pendingBlocks.length > 0) { finalize(); return; }   // plain drag after release → finish
+      state = 'SELECTED';
+      document.body.style.cursor = '';
+      showSavePanel(extracted.text, extracted.assets, window.location.href, document.title);
+
+    } else if (state === 'SELECTING') {
+      const extracted = extractFromSelection(selection);
+      if (!extracted.text.trim()) return; // empty selection — wait for next mouseup
+      document.removeEventListener('mouseup', onMouseup);
+      const hint = document.getElementById('atomic-clipper-select-hint');
+      if (hint) hint.remove();
+      showSavePanel(extracted.text, extracted.assets, selectingUrl, selectingTitle);
+    }
+  }
+
+  // --- MULTI-BLOCK ACCUMULATION (Sprint 18) ---
+
+  function addBlock(extracted) {                              // append a pick
+    pendingBlocks.push({
+      text: extracted.text || '',
+      assets: Array.isArray(extracted.assets) ? extracted.assets : []
+    });
+  }
+
+  function mergeBlocks() {                                    // → one { text, assets }
+    const text = pendingBlocks
+      .map(b => b.text)
+      .filter(t => t && t.trim())          // drop empty-text (image-only) segments from the join
+      .join('\n\n---\n\n');                // '---' divider between blocks (AC2)
+    const seen = new Set();
+    const assets = [];
+    for (const b of pendingBlocks) {
+      for (const url of b.assets) {        // cross-block dedup (AC3); per-block already deduped by pushAsset
+        if (!seen.has(url)) { seen.add(url); assets.push(url); }
+      }
+    }
+    return { text, assets };
+  }
+
+  function finalize() {                                       // teardown picking UI → save panel
+    const merged = mergeBlocks();
+    document.removeEventListener('mouseover', onMouseover);
+    document.removeEventListener('keyup', onKeyup);
+    const tray = document.getElementById('atomic-clipper-tray');
+    if (tray) tray.remove();
+    if (currentHighlight) { currentHighlight.classList.remove('atomic-clipper-highlight'); currentHighlight = null; }
+    state = 'SELECTED';
+    document.body.style.cursor = '';
+    showSavePanel(merged.text, merged.assets, window.location.href, document.title, pendingBlocks.length);
+  }
+
+  function flashPick(el) {                                    // brief green confirm on a click-add
+    if (!el || !el.classList) return;
+    el.classList.add('atomic-clipper-added');
+    setTimeout(() => { if (el.classList) el.classList.remove('atomic-clipper-added'); }, 350);
+  }
+
+  // --- PENDING-BLOCKS TRAY ---
+
+  function showPendingTray() {
+    let tray = document.getElementById('atomic-clipper-tray');
+    if (!tray) { tray = buildPendingTray(); document.body.appendChild(tray); }
+    updatePendingTray();
+  }
+
+  function updatePendingTray() {
+    const tray = document.getElementById('atomic-clipper-tray');
+    if (!tray) return;
+    const n = pendingBlocks.length;
+    if (n === 0) { tray.remove(); return; }               // auto-close → clean PICKING
+    tray.querySelector('#atomic-clipper-tray-count').textContent = n + (n === 1 ? ' block' : ' blocks');
+    tray.querySelector('#atomic-clipper-tray-save').textContent = 'Save (' + n + ')';
+  }
+
+  function buildPendingTray() {
+    const tray = document.createElement('div');
+    tray.id = 'atomic-clipper-tray';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'font-weight:700;margin-bottom:8px;color:#0a66c2;font-size:14px;';
+    header.textContent = 'Atomic Clipper — Pending';
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:12px;color:#555;margin-bottom:10px;line-height:1.4;';
+    hint.textContent = 'Hold Ctrl (⌘) · click/drag regions · release to save';
+
+    const count = document.createElement('div');
+    count.id = 'atomic-clipper-tray-count';
+    count.style.cssText = 'font-size:13px;font-weight:600;color:#333;margin-bottom:12px;';
+    count.textContent = '0 blocks';
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;justify-content:flex-end;';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.id = 'atomic-clipper-tray-remove';
+    removeBtn.type = 'button';
+    removeBtn.textContent = 'Remove last';
+    removeBtn.style.cssText =
+      'padding:6px 10px;border:1px solid #ccc;background:#fff;' +
+      'border-radius:4px;cursor:pointer;font-size:13px;color:#333;';
+    removeBtn.addEventListener('click', () => { pendingBlocks.pop(); updatePendingTray(); });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.id = 'atomic-clipper-tray-cancel';
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText =
+      'padding:6px 10px;border:1px solid #ccc;background:#fff;' +
+      'border-radius:4px;cursor:pointer;font-size:13px;color:#333;';
+    cancelBtn.addEventListener('click', () => { cleanup(); });
+
+    const saveBtn = document.createElement('button');
+    saveBtn.id = 'atomic-clipper-tray-save';
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Save (0)';
+    saveBtn.style.cssText =
+      'padding:6px 10px;background:#0a66c2;color:#fff;border:none;' +
+      'border-radius:4px;cursor:pointer;font-size:13px;';
+    saveBtn.addEventListener('click', () => { finalize(); });
+
+    btnRow.appendChild(removeBtn);
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(saveBtn);
+
+    tray.appendChild(header);
+    tray.appendChild(hint);
+    tray.appendChild(count);
+    tray.appendChild(btnRow);
+    return tray;
   }
 
   // --- INLINE SAVE PANEL ---
 
-  function showSavePanel(clipText, clipAssets, clipUrl, clipTitle) {
+  function showSavePanel(clipText, clipAssets, clipUrl, clipTitle, blockCount) {
     state = 'SAVING';
 
     // Fetch existing categories for datalist
@@ -188,13 +366,17 @@
         ? clipText.slice(0, 200) + '\u2026'
         : clipText;
 
+      const isImageOnly = !clipText.trim() && Array.isArray(clipAssets) && clipAssets.length > 0;
+
       const panel = document.createElement('div');
       panel.id = 'atomic-clipper-panel';
 
       // Header
       const header = document.createElement('div');
       header.style.cssText = 'font-weight:700;margin-bottom:8px;color:#0a66c2;font-size:14px;';
-      header.textContent = 'Atomic Clipper \u2014 Save Clip';
+      header.textContent = (blockCount && blockCount > 1)
+        ? 'Atomic Clipper \u2014 Save Clip (' + blockCount + ' blocks)'
+        : 'Atomic Clipper \u2014 Save Clip';
 
       // Preview
       const previewEl = document.createElement('div');
@@ -202,7 +384,26 @@
         'font-size:12px;color:#555;margin-bottom:12px;' +
         'max-height:60px;overflow:hidden;line-height:1.4;' +
         'white-space:pre-wrap;word-break:break-word;';
-      previewEl.textContent = preview;
+      if (isImageOnly) {
+        // Image-only clip: show an affordance (caption + thumbnail) instead of a blank box.
+        const cap = document.createElement('div');
+        cap.textContent = clipAssets.length === 1
+          ? 'Image clip'
+          : 'Image clip — ' + clipAssets.length + ' images';
+        const thumb = document.createElement('img');
+        thumb.src = clipAssets[0];
+        thumb.alt = '';
+        thumb.loading = 'lazy';
+        thumb.referrerPolicy = 'no-referrer';
+        thumb.style.cssText =
+          'display:block;max-width:100%;max-height:44px;margin-top:6px;border-radius:3px;';
+        // Dead / hotlink-protected / host-CSP-blocked URL → drop the img, keep the caption.
+        thumb.addEventListener('error', () => thumb.remove());
+        previewEl.appendChild(cap);
+        previewEl.appendChild(thumb);
+      } else {
+        previewEl.textContent = preview;
+      }
 
       // Category label
       const label = document.createElement('label');

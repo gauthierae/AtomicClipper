@@ -5,6 +5,34 @@
   cursor: crosshair !important;
 }
 
+/* Accumulated-block confirmation flash (green vs the blue picking highlight) */
+.atomic-clipper-added {
+  outline: 2px solid #1a7f37 !important;
+  outline-offset: 2px !important;
+}
+
+/* Pending-blocks tray — mirrors #atomic-clipper-panel, narrower */
+#atomic-clipper-tray {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 240px;
+  z-index: 2147483647;
+  background: #fff;
+  border: 1px solid #0a66c2;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+#atomic-clipper-tray * {
+  box-sizing: border-box;
+  font-family: system-ui, sans-serif;
+}
+
 /* Inline save panel */
 #atomic-clipper-panel {
   position: fixed;
@@ -25,6 +53,11 @@
 #atomic-clipper-panel * {
   box-sizing: border-box;
   font-family: system-ui, sans-serif;
+}
+
+#atomic-clipper-panel img {
+  display: block;
+  max-width: 100%;
 }
 
 /* Success toast */
