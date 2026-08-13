@@ -1,5 +1,5 @@
 import { getAllClips, deleteClip } from '../shared/storage.js';
-import { generateMarkdown, sanitizeFilename, formatClipBlock, isHttpUrl } from '../shared/markdown.js';
+import { generateMarkdown, sanitizeFilename, formatClipDocument, isHttpUrl } from '../shared/markdown.js';
 
 function getDomain(url) {
   try { return new URL(url).hostname; } catch { return url; }
@@ -34,7 +34,7 @@ function showErrorToast(msg) {
 
 async function copyClipMd(clip, btn) {
   try {
-    await navigator.clipboard.writeText(formatClipBlock(clip));
+    await navigator.clipboard.writeText(formatClipDocument(clip));
     btn.textContent = 'Copied!';
     btn.disabled = true;
     setTimeout(() => {
@@ -76,6 +76,7 @@ function buildThumb(url) {
 function buildClipEl(clip, catClips) {
   const article = document.createElement('article');
   article.className = 'clip-item';
+  article.dataset.clipId = clip.id;   // a clip can render in several tag sections once multi-tag lands
 
   // Header: title + delete button
   const header = document.createElement('div');
@@ -97,10 +98,16 @@ function buildClipEl(clip, catClips) {
   metaEl.className = 'clip-meta';
   metaEl.textContent = `Saved: ${formatDate(clip.scrapedAt)} · ${getDomain(clip.url)}`;
 
-  // Category badge
+  // Tag badges — one per tag. Reuses .category-badge so no new visual language is introduced.
   const badgeEl = document.createElement('span');
-  badgeEl.className = 'category-badge';
-  badgeEl.textContent = clip.category || 'Uncategorized';
+  badgeEl.className = 'clip-tags';
+  const clipTags = Array.isArray(clip.tags) && clip.tags.length ? clip.tags : ['Uncategorized'];
+  for (const tag of clipTags) {
+    const pill = document.createElement('span');
+    pill.className = 'category-badge';
+    pill.textContent = tag;
+    badgeEl.appendChild(pill);
+  }
 
   // Excerpt — null-safe: corrupted clip with text: null renders blank rather than crashing
   const text = clip.text ?? '';
@@ -189,13 +196,20 @@ function buildClipEl(clip, catClips) {
       alert('Failed to delete clip. Please try again.');
       return;
     }
+    // Storage holds one clip, but the DOM may hold several renderings of it once a clip carries more
+    // than one tag. Remove them all, then prune any section left empty.
+    const nodes = document.querySelectorAll(`[data-clip-id="${CSS.escape(clip.id)}"]`);
+    const sections = new Set();
+    nodes.forEach(node => {
+      const s = node.closest('.category-section');
+      if (s) sections.add(s);
+      node.remove();
+    });
+    sections.forEach(s => {
+      if (s.querySelectorAll('.clip-item').length === 0) s.remove();
+    });
     const idx = catClips.indexOf(clip);
     if (idx !== -1) catClips.splice(idx, 1);
-    const section = article.closest('.category-section');
-    article.remove();
-    if (section && section.querySelectorAll('.clip-item').length === 0) {
-      section.remove();
-    }
     if (document.querySelectorAll('.clip-item').length === 0) {
       document.getElementById('empty-msg').hidden = false;
     }
@@ -204,9 +218,29 @@ function buildClipEl(clip, catClips) {
   return article;
 }
 
+function ensureMigrated() {
+  // The library reads storage directly, so without this it can paint a half-migrated store — or, if the
+  // migration failed, an empty one beside a banner insisting the clips are safe.
+  return new Promise(resolve => {
+    chrome.runtime.sendMessage({ action: 'ensureMigrated' }, () => {
+      void chrome.runtime.lastError;   // resolve either way; the banner below reports the failure
+      resolve();
+    });
+  });
+}
+
+async function showMigrationErrorIfAny() {
+  const { migrationError } = await chrome.storage.local.get('migrationError');
+  if (!migrationError) return;
+  document.getElementById('migration-detail').textContent = migrationError;
+  document.getElementById('migration-warning').hidden = false;
+}
+
 async function render() {
   const library = document.getElementById('library');
   const emptyMsg = document.getElementById('empty-msg');
+  await ensureMigrated();
+  await showMigrationErrorIfAny();
   const clips = await getAllClips();
 
   if (clips.length === 0) {
@@ -214,12 +248,15 @@ async function render() {
     return;
   }
 
-  // Group by category
+  // Group by tag. A clip appears under every tag it carries — today that is always exactly one, but
+  // the code must be correct for N before multi-tag lands, or that sprint inherits a silent bug.
   const groups = {};
   for (const clip of clips) {
-    const cat = clip.category || 'Uncategorized';
-    if (!groups[cat]) groups[cat] = [];
-    groups[cat].push(clip);
+    const tags = Array.isArray(clip.tags) && clip.tags.length ? clip.tags : ['Uncategorized'];
+    for (const tag of tags) {
+      if (!groups[tag]) groups[tag] = [];
+      groups[tag].push(clip);
+    }
   }
 
   // Categories alphabetically; clips newest-first within each category

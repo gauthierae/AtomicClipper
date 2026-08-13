@@ -3,6 +3,7 @@
 
   function buildExtractor() {
     const assets = [];
+    let droppedCount = 0;
 
     function resolveUrl(raw) {
       if (!raw || !raw.trim()) return '';
@@ -15,9 +16,26 @@
       return (srcset || '').split(',')[0].trim().split(/\s+/)[0] || '';
     }
 
+    // Only http(s) and data:image/* may enter assets[] — javascript:/blob:/non-image data: are
+    // dropped. No execution path exists via img.src today; this is the guard the redesign was going
+    // to need anyway (decisions.md 2026-07-19), moved up because this sprint already rewrites
+    // pushAsset. Unparseable → drop, not keep: fail closed on a string the page fully controls.
+    function isAllowedAssetUrl(url) {
+      try {
+        const u = new URL(url);
+        if (u.protocol === 'http:' || u.protocol === 'https:') return true;
+        if (u.protocol === 'data:') return /^data:image\//i.test(url);
+        return false;
+      } catch (_) {
+        return false;
+      }
+    }
+
     function pushAsset(url) {
       const resolved = resolveUrl(url);
-      if (resolved && !assets.includes(resolved)) assets.push(resolved); // absolutize + dedup
+      if (!resolved) return;                          // empty candidate — nothing to count
+      if (!isAllowedAssetUrl(resolved)) { droppedCount++; return; }
+      if (!assets.includes(resolved)) assets.push(resolved); // absolutize + dedup
     }
 
     function walk(node) {
@@ -120,20 +138,28 @@
       }
     }
 
-    return { walk, assets };
+    // Getter, not a destructured primitive: pushAsset mutates droppedCount during walk(), which
+    // runs after buildExtractor() returns — a copied number would freeze at 0.
+    return { walk, assets, getDroppedCount: () => droppedCount };
   }
 
   function extract(element) {
-    const { walk, assets } = buildExtractor();
+    const { walk, assets, getDroppedCount } = buildExtractor();
     const text = walk(element).trim();
-    return text.length >= 10 ? { text, assets } : { text: element.innerText.trim(), assets };
+    const droppedCount = getDroppedCount();
+    return text.length >= 10
+      ? { text, assets, droppedCount }
+      : { text: element.innerText.trim(), assets, droppedCount };
   }
 
   // Entry point for drag-selected ranges: walks a DocumentFragment's childNodes
   function extractFragment(fragment) {
-    const { walk, assets } = buildExtractor();
+    const { walk, assets, getDroppedCount } = buildExtractor();
     const text = Array.from(fragment.childNodes).map(walk).join('').trim();
-    return text.length >= 10 ? { text, assets } : { text: '', assets };
+    const droppedCount = getDroppedCount();
+    return text.length >= 10
+      ? { text, assets, droppedCount }
+      : { text: '', assets, droppedCount };
   }
 
   window._atomicClipperExtract = extract;
