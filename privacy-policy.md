@@ -1,6 +1,6 @@
 # Privacy Policy — Atomic Clipper
 
-**Last updated**: 2026-07-19
+**Last updated**: 2026-08-12 · **Applies to**: source build 2.6.0 and Chrome Web Store build 2.2.1
 
 Atomic Clipper is a Chrome extension that clips web content from any webpage for personal research use.
 
@@ -15,25 +15,37 @@ All clipped content is stored exclusively in `chrome.storage.local` on your own 
 - the clipped content, converted to Markdown
 - the page title and page URL at the time of clipping
 - the **web addresses (URLs) of any images or videos** contained in the clipped element — the URLs only; the image and video files themselves are never downloaded or stored
-- the category you assign
+- a list of which of those image URLs did not load when you captured the clip, so the export can mark them
+- the tags you assign
+- a reference block for citation details: author, title, publication, publication date, source URL, and access date. The extension fills in only the source URL and the access date today. The other fields stay empty until you edit them
 - the save timestamp
+
+### A note on the 2.6.0 upgrade
+
+Version 2.6.0 changed how clips are arranged inside `chrome.storage.local`. The first time you run it, the extension rewrites your existing clips into the new arrangement on your own device.
+
+This is a local operation. Nothing is uploaded, and no clip content is read by anyone. If the rewrite fails, the extension keeps your original data and shows a message in the library instead of deleting anything.
 
 ## Image display and network requests
 
 The extension makes **no network requests of its own** — no analytics, no crash reports, no usage tracking, no calls to any service operated by this extension.
 
-There is one exception, and it exists only to show you your own clips:
+Your browser does make ordinary image requests to third-party hosts in three situations. All three point at an image's **original** web address — the same address the page you clipped it from was already using. There are three, so each one is listed:
 
-When a clip contains images, the extension displays them by pointing your browser at the image's original web address — the same address the page you clipped it from was using. This happens in the clip library and in the save-panel preview of an image clip. Your browser therefore makes an ordinary image request to that third-party host (for example, the news site or CDN the image lives on), exactly as it would if you visited the original page again.
+**1 — The clip library.** When a clip contains images, the library shows them by pointing your browser at their original addresses.
+
+**2 — The save-panel preview.** An image clip shows a preview thumbnail the same way, before you save it.
+
+**3 — The availability check, when you capture.** When you pick an element that contains images, the extension checks whether each image still loads. It needs this to mark unavailable images in your export. This check runs **as the save panel opens** — that is, **before you save**, and the requests are already sent if you then cancel instead of saving.
 
 What this means in practice:
 
 - That host can see that an image was requested, along with the information any web request carries (such as your IP address).
 - Atomic Clipper sends **no referrer** with these requests (`referrerPolicy = "no-referrer"`), so the host is not told which page or extension the request came from.
-- No clip content, category, or other stored data is ever included in these requests.
+- No clip content, tag, or other stored data is ever included in these requests.
 - Nothing is sent to Atomic Clipper or to any party associated with it.
 
-If you would rather not make these requests, deleting an image clip removes its stored image URLs and stops them.
+Deleting an image clip removes its stored image URLs. That stops situations 1 and 2 for that clip. It cannot undo situation 3, because the availability check already ran at capture time.
 
 ## Permissions
 
