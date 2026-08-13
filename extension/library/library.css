@@ -43,6 +43,27 @@ h1 {
   margin-bottom: 16px;
 }
 
+/* Migration failure — red rather than the amber quota warning, because it needs a different
+   response from the user. The copy leads with the data being intact; the register should not
+   contradict it by looking catastrophic. */
+#migration-warning {
+  background: #fdecea;
+  border: 1px solid #d93025;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #611a15;
+  margin-bottom: 16px;
+}
+
+#migration-detail {
+  margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #7f3b34;
+  word-break: break-word;
+}
+
 .category-section {
   margin-bottom: 32px;
 }
@@ -114,6 +135,13 @@ h2 {
   margin-bottom: 6px;
 }
 
+.clip-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
 .category-badge {
   display: inline-block;
   background: #e0eeff;
@@ -122,7 +150,6 @@ h2 {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 99px;
-  margin-bottom: 8px;
 }
 
 .clip-excerpt,

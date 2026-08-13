@@ -19,6 +19,7 @@
 
   // --- MULTI-BLOCK SELECTION (Sprint 18) ---
   const pendingBlocks = [];                                   // [{ text, assets }]
+  let justAccumulatedDrag = false; // one-shot guard: consumed by the very next click (DEF-18-01)
   const isMac = /Mac/i.test(navigator.platform || navigator.userAgent || '');
   function isAccel(e) { return isMac ? e.metaKey : e.ctrlKey; }         // modifier currently held?
   function isAccelKey(e) { return isMac ? e.key === 'Meta' : e.key === 'Control'; } // the released key
@@ -41,6 +42,9 @@
 
     // Remove all injected elements
     document.querySelectorAll('[id^="atomic-clipper-"]').forEach(el => el.remove());
+
+    // Strip any lingering pick-confirmation flash (ENH-18-01)
+    document.querySelectorAll('.atomic-clipper-added').forEach(el => el.classList.remove('atomic-clipper-added'));
 
     // Remove highlight
     if (currentHighlight) {
@@ -97,9 +101,46 @@
     return false;
   }
 
+  // A container this large is structural (page shell, `<main>`, a full-width wrapper), not a pickable
+  // content element — treat it like isOwnElement so it can never become currentHighlight or a click
+  // target (DEF-19-01). Media leaf elements are exempt: a full-viewport image/video is legitimate
+  // content a user may deliberately want to clip (Sprint 19), not page whitespace.
+  const STRUCTURAL_AREA_RATIO = 0.9; // covers ≥90% of both viewport dimensions
+  const STRUCTURAL_EXEMPT_TAGS = new Set(['IMG', 'VIDEO', 'PICTURE', 'CANVAS', 'SVG']);
+
+  // Stored string length, not decoded image bytes — storage.js rewrites the whole clips array on
+  // every save, so the string is exactly what each future write pays for.
+  const INLINE_ASSET_SIZE_CAP_BYTES = 100 * 1024;
+
+  function isOversizedInlineAsset(url) {
+    return typeof url === 'string'
+      && url.startsWith('data:image/')
+      && url.length > INLINE_ASSET_SIZE_CAP_BYTES;
+  }
+
+  function isStructuralContainer(el) {
+    if (!el) return false;
+    if (STRUCTURAL_EXEMPT_TAGS.has(el.tagName)) return false;
+    if (el.tagName === 'MAIN') return true;
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (!vw || !vh || !rect.width || !rect.height) return false;
+    return (rect.width / vw) >= STRUCTURAL_AREA_RATIO && (rect.height / vh) >= STRUCTURAL_AREA_RATIO;
+  }
+
   function onMouseover(e) {
     if (state !== 'PICKING') return;
     if (isOwnElement(e.target)) return;
+
+    if (isStructuralContainer(e.target)) {
+      // Whitespace / structural area — clear any stale highlight, do not adopt this element.
+      if (currentHighlight) {
+        currentHighlight.classList.remove('atomic-clipper-highlight');
+        currentHighlight = null;
+      }
+      return;
+    }
 
     if (currentHighlight && currentHighlight !== e.target) {
       currentHighlight.classList.remove('atomic-clipper-highlight');
@@ -125,11 +166,18 @@
   function onClick(e) {
     if (state !== 'PICKING') return;
     if (isOwnElement(e.target)) return;          // tray + buttons are own elements → ignored here
+    if (justAccumulatedDrag) { justAccumulatedDrag = false; return; }  // consume unconditionally (DEF-18-01)
+
+    const selected = currentHighlight || e.target;
+    if (isStructuralContainer(selected)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;                                     // whitespace / structural area — no valid element under the cursor
+    }
 
     e.preventDefault();
     e.stopPropagation();                          // keeps suppressing browser Cmd/Ctrl+click new-tab
 
-    const selected = currentHighlight || e.target;
     const extracted = window._atomicClipperExtract(selected);
     const hasContent = !!extracted.text.trim() ||
                        (Array.isArray(extracted.assets) && extracted.assets.length > 0);
@@ -162,7 +210,7 @@
       selectingTitle = clipTitle;
       document.body.style.cursor = '';
       document.removeEventListener('click', onClick, true);
-      showSelectHint();
+      showSelectHint(extracted.droppedCount > 0);
       return;
     }
     state = 'SELECTED';
@@ -206,6 +254,7 @@
         addBlock(extracted);
         selection.removeAllRanges();                      // clear stray browser selection
         if (currentHighlight) { currentHighlight.classList.remove('atomic-clipper-highlight'); currentHighlight = null; }
+        justAccumulatedDrag = true;                        // guard the next click (DEF-18-01)
         showPendingTray();
         return;
       }
@@ -263,6 +312,7 @@
     const tray = document.getElementById('atomic-clipper-tray');
     if (tray) tray.remove();
     if (currentHighlight) { currentHighlight.classList.remove('atomic-clipper-highlight'); currentHighlight = null; }
+    document.querySelectorAll('.atomic-clipper-added').forEach(el => el.classList.remove('atomic-clipper-added')); // ENH-18-01
     state = 'SELECTED';
     document.body.style.cursor = '';
     showSavePanel(merged.text, merged.assets, window.location.href, document.title, pendingBlocks.length);
@@ -349,13 +399,88 @@
     return tray;
   }
 
+  // --- ASSET AVAILABILITY PROBE (ENH-19-01) ---
+  // Best-effort capture-time probe: `new Image()` works cross-origin with no new permission; a
+  // fetch()-based probe would fail CORS on most CDNs (200-po/BACKLOG.md, 2026-07-04). Non-blocking —
+  // starts when the save panel opens and races the user's category entry; an asset not yet resolved by
+  // Save time is treated as available.
+  function probeAssetAvailability(urls, unavailableSet) {
+    for (const url of urls) {
+      const probe = new Image();
+      probe.referrerPolicy = 'no-referrer';
+      probe.addEventListener('error', () => unavailableSet.add(url));
+      probe.src = url;
+    }
+  }
+
+  // --- SIZE-CAP DECISION ROW (Sprint 21) ---
+  // Non-blocking on Save, matching probeAssetAvailability: an asset the user never decides on is
+  // kept. The KB figure describes the stored string, not the decoded image — hence "image data".
+  function buildOversizedAssetRow(url, sizeBytes, onDecision) {
+    const row = document.createElement('div');
+    row.style.cssText =
+      'font-size:12px;color:#555;margin:8px 0;padding:8px;border:1px solid #f0ad4e;' +
+      'border-radius:4px;background:#fff8ec;';
+
+    const kb = Math.round(sizeBytes / 1024);
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', `Oversized inline image, ${kb} KB`);
+
+    const label = document.createElement('div');
+    label.style.cssText = 'margin-bottom:6px;';
+    label.setAttribute('role', 'status'); // the storage-usage figure arrives async — announce it
+    label.textContent = `Inline image data · ${kb} KB`;
+    row.appendChild(label);
+
+    chrome.runtime.sendMessage({ action: 'getStorageUsage' }, (usage) => {
+      void chrome.runtime.lastError;
+      if (!usage || typeof usage.quota !== 'number' || !usage.quota) return;
+      const pct = Math.round((sizeBytes / usage.quota) * 100);
+      label.textContent = `Inline image data · ${kb} KB — uses ${pct}% of your library space`;
+    });
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;';
+
+    const btnStyle =
+      'padding:4px 10px;border:1px solid #ccc;background:#fff;' +
+      'border-radius:4px;cursor:pointer;font-size:12px;';
+
+    const keepBtn = document.createElement('button');
+    keepBtn.type = 'button';
+    keepBtn.textContent = 'Keep';
+    keepBtn.setAttribute('aria-label', `Keep the ${kb} KB inline image`);
+    keepBtn.style.cssText = btnStyle;
+    keepBtn.addEventListener('click', () => { onDecision('keep'); row.remove(); });
+
+    const skipBtn = document.createElement('button');
+    skipBtn.type = 'button';
+    skipBtn.textContent = 'Skip';
+    skipBtn.setAttribute('aria-label', `Skip the ${kb} KB inline image`);
+    skipBtn.style.cssText = btnStyle;
+    skipBtn.addEventListener('click', () => { onDecision('skip'); row.remove(); });
+
+    btnRow.appendChild(keepBtn);
+    btnRow.appendChild(skipBtn);
+    row.appendChild(btnRow);
+    return row;
+  }
+
   // --- INLINE SAVE PANEL ---
 
   function showSavePanel(clipText, clipAssets, clipUrl, clipTitle, blockCount) {
     state = 'SAVING';
 
+    const unavailableAssets = new Set();
+    if (Array.isArray(clipAssets) && clipAssets.length) {
+      probeAssetAvailability(clipAssets, unavailableAssets);
+    }
+
+    const skippedAssets = new Set();
+    const oversizedAssets = (Array.isArray(clipAssets) ? clipAssets : []).filter(isOversizedInlineAsset);
+
     // Fetch existing categories for datalist
-    chrome.runtime.sendMessage({ action: 'getCategories' }, (categories) => {
+    chrome.runtime.sendMessage({ action: 'getTags' }, (categories) => {
       // Suppress "no handler" error (Sprint 7 — handler added in Sprint 8)
       void chrome.runtime.lastError;
       if (cleaned) return;
@@ -403,6 +528,26 @@
         previewEl.appendChild(thumb);
       } else {
         previewEl.textContent = preview;
+      }
+
+      // Size-cap decision rows (one per oversized inline asset), or null when there are none.
+      // Read lazily by focusRing(), which is why it is built here rather than at append time.
+      let oversizedContainer = null;
+      if (oversizedAssets.length) {
+        oversizedContainer = document.createElement('div');
+        for (const url of oversizedAssets) {
+          oversizedContainer.appendChild(
+            buildOversizedAssetRow(url, url.length, (decision) => {
+              if (decision === 'skip') skippedAssets.add(url);
+            })
+          );
+        }
+        // Delegated: rows come and go as they are decided, so binding per button would go stale.
+        oversizedContainer.addEventListener('keydown', (e) => {
+          if (e.key !== 'Tab') return;
+          e.preventDefault();
+          stepFocus(e.target, e.shiftKey);
+        });
       }
 
       // Category label
@@ -557,24 +702,42 @@
       btnRow.appendChild(cancelBtn);
       btnRow.appendChild(saveBtn);
 
-      // Focus trap: Tab cycles input → Cancel → Save → input
+      // Focus trap: Tab cycles the panel's live controls in DOM order —
+      // [size-cap Keep/Skip buttons…] → input → Cancel → Save → wrap.
+      // Rebuilt on every Tab rather than captured once: a size-cap row removes itself as soon as it
+      // is decided, so the ring shrinks mid-session (CR-21-01). With no rows it is
+      // [input, Cancel, Save] — identical to the pre-Sprint-21 cycle in both directions.
+      function focusRing() {
+        const rows = oversizedContainer
+          ? Array.from(oversizedContainer.querySelectorAll('button'))
+          : [];
+        return [...rows, input, cancelBtn, saveBtn];
+      }
+
+      function stepFocus(from, backwards) {
+        const ring = focusRing();
+        const i = ring.indexOf(from);
+        if (i === -1) { input.focus(); return; }
+        ring[(i + (backwards ? -1 : 1) + ring.length) % ring.length].focus();
+      }
+
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
           dropdown.style.display = 'none';
-          if (e.shiftKey) saveBtn.focus(); else cancelBtn.focus();
+          stepFocus(input, e.shiftKey);
         }
       });
       cancelBtn.addEventListener('keydown', (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
-          if (e.shiftKey) input.focus(); else saveBtn.focus();
+          stepFocus(cancelBtn, e.shiftKey);
         }
       });
       saveBtn.addEventListener('keydown', (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
-          if (e.shiftKey) cancelBtn.focus(); else input.focus();
+          stepFocus(saveBtn, e.shiftKey);
         }
       });
       dropdown.addEventListener('keydown', (e) => {
@@ -587,6 +750,7 @@
 
       panel.appendChild(header);
       panel.appendChild(previewEl);
+      if (oversizedContainer) panel.appendChild(oversizedContainer);
       panel.appendChild(label);
       panel.appendChild(inputWrapper);
       panel.appendChild(btnRow);
@@ -597,21 +761,50 @@
       // --- SAVE ---
       saveBtn.addEventListener('click', () => {
         const category = input.value.trim() || 'Uncategorized';
+        const finalAssets = (Array.isArray(clipAssets) ? clipAssets : [])
+          .filter(u => !skippedAssets.has(u));
+
+        // Skipping the sole asset of an image-only clip would otherwise persist a card with no
+        // text and no image — junk the user has to find and delete (SR-21-01).
+        if (!clipText.trim() && finalAssets.length === 0) {
+          cleanup();
+          showToast('Nothing left to save — the image was skipped.');
+          return;
+        }
+
+        const capturedAt = new Date().toISOString();
         const clip = {
           id: crypto.randomUUID(),
           url: clipUrl,
           title: clipTitle,
           text: clipText,
-          assets: clipAssets,
-          category,
-          scrapedAt: new Date().toISOString()
+          assets: finalAssets,
+          unavailableAssets: Array.from(unavailableAssets).filter(u => finalAssets.includes(u)),
+          tags: [category],
+          // Fields defined now, filled by extraction in a later sprint — defining them here is what
+          // spares that sprint a second migration.
+          reference: {
+            author: null,
+            title: null,
+            publication: null,
+            publishDate: null,
+            sourceUrl: clipUrl,
+            // Kept distinct from scrapedAt despite agreeing here: one is a storage timestamp, the
+            // other a citation field that may later be edited independently.
+            accessDate: capturedAt
+          },
+          provenance: [],   // reserved; single-source today, populated when merge lands
+          scrapedAt: capturedAt
         };
 
         chrome.runtime.sendMessage({ action: 'saveClip', data: clip }, (response) => {
           void chrome.runtime.lastError;
           cleanup();
           if (response?.ok === false) {
-            showToast('Could not save \u2014 storage may be full.');
+            // `migrating` distinguishes a blocked save from a full disk — different problem, different fix.
+            showToast(response.migrating
+              ? 'Could not save \u2014 your library is still being upgraded.'
+              : 'Could not save \u2014 storage may be full.');
           } else {
             showToast('Clip saved!');
           }
@@ -640,11 +833,16 @@
   }
 
   // Selection fallback hint — persistent (no auto-hide); removed by onMouseup or cleanup()
-  function showSelectHint() {
+  // `hadDroppedAssets` distinguishes "nothing here" from "the only thing here was a filtered-out
+  // image" — telling the latter user to select text points them at something that was never going
+  // to produce a savable clip. Manual drag-select still works in either case (onMouseup, SELECTING).
+  function showSelectHint(hadDroppedAssets) {
     const hint = document.createElement('div');
     hint.id = 'atomic-clipper-select-hint';
     hint.setAttribute('role', 'status'); // announces to screen readers (polite live region)
-    hint.textContent = "Couldn\u2019t extract \u2014 select text to clip";
+    hint.textContent = hadDroppedAssets
+      ? "This image can\u2019t be clipped \u2014 Esc to cancel"
+      : "Couldn\u2019t extract \u2014 select text to clip";
     document.body.appendChild(hint);
   }
 
