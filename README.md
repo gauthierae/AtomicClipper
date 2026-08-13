@@ -6,7 +6,7 @@ A Chrome extension that lets you clip any web content into a local research libr
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg) 
 
-**Source build: 2.4.0** (development, this repo) · **[Chrome Web Store](https://chromewebstore.google.com/detail/atomic-clipper/dolcnaamlhbbdigmggnlikcdpdjjiadp): 2.2.1** (stable)
+**Source build: 2.6.0** (development, this repo) · **[Chrome Web Store](https://chromewebstore.google.com/detail/atomic-clipper/dolcnaamlhbbdigmggnlikcdpdjjiadp): 2.2.1** (stable)
 
 ![Demo](assets/Atomic-Clipper-MiniDemo.gif)
 
@@ -16,9 +16,11 @@ A Chrome extension that lets you clip any web content into a local research libr
 - **Drag-select** across elements to capture a passage, hierarchy preserved
 - **Hold Cmd/Ctrl to pick several regions**, release to save them as one clip
 - Clip **image-only** elements — figures and images without text
-- Tag each clip with a category at save time
-- Browse your saved library, grouped by category
-- **Copy any clip as Markdown** to the clipboard, or export a whole category as `.md`
+- Tag each clip at save time
+- Browse your saved library, grouped by tag
+- **Copy any clip as Markdown** — you get a standalone note with YAML frontmatter, ready to drop into a vault
+- Export a whole tag as one `.md` file, with frontmatter at the top
+- Images that no longer load are **marked in the export** rather than left as broken links
 - All data stays on your device — no cloud sync, no backend
 
 ## Installation
@@ -52,6 +54,8 @@ The source in this repository **runs ahead of the Web Store version.** That is d
 
 Press **Esc** at any time to cancel clipping without saving.
 
+> **Large embedded images.** Some pages embed an image directly in the HTML instead of linking to it. If one of those is larger than about 100 KB, the save panel asks you to **Keep** or **Skip** it. Chrome gives the extension a 10 MB storage budget, and a single embedded image can take a large share of it. Skip keeps the rest of the clip.
+
 ### Capturing more than one element
 
 **Drag-select** — press and drag across a passage instead of clicking. The selection is captured with its structure intact rather than as flat text.
@@ -70,13 +74,13 @@ Clips are grouped by category (alphabetical) and sorted newest-first within each
 
 ### Exporting
 
-In the library, click **Export .md** next to any category header. A Markdown file named after the category downloads to your default downloads folder.
+In the library, click **Export .md** next to any tag header. A Markdown file named after the tag downloads to your default downloads folder. The file opens with YAML frontmatter holding the tag, the export date, and the clip count.
 
-For a single clip, click **Copy MD** on its card to put its Markdown on the clipboard.
+For a single clip, click **Copy MD** on its card. You get a **standalone vault note**: YAML frontmatter (`title`, `source`, `tags`, `saved`, and any citation fields you filled in), then the clip as the document body.
 
-Images in a clip are exported as standard Markdown image links (`![](url)`), so they render in any Markdown viewer.
+Images in a clip are exported as standard Markdown image links (`![](url)`), so they render in any Markdown viewer. An image that did not load when you captured the clip is **annotated in the export** instead of exported as a broken link. SVG images are left out of the export.
 
-The export format is compatible with NotebookLM, Perplexity, and LLM context windows.
+The export format is compatible with NotebookLM, Perplexity, LLM context windows, and Markdown vaults such as Obsidian.
 
 ## Known limitations
 
@@ -84,6 +88,8 @@ The export format is compatible with NotebookLM, Perplexity, and LLM context win
 - SPA navigation (React/Next.js/Vue) cancels the picker if the URL changes mid-session — a notice appears explaining why
 - Image **files** are never downloaded or stored — only their web addresses, which are used to display and export the image (see Privacy)
 - May not clip correctly behind login walls or paywalls
+- **SVG images are left out of the export** — they render inconsistently across Markdown viewers
+- Image addresses that do not use `http` or `https` are dropped at capture time. The save panel reports how many
 - **"Show full text" may appear truncated** — clicking the button in the library sometimes shows only a preview even after expanding. The full text is stored correctly and will appear in your exported `.md` file.
 - **Source links include a referrer** — when you click a "source" link in the library, the destination site may see that you came from the Atomic Clipper library page.
 - **Popup occasionally loads blank** — if the popup appears empty, close it and click the toolbar icon again. This is a rare Chrome extension timing issue.
@@ -92,7 +98,15 @@ The export format is compatible with NotebookLM, Perplexity, and LLM context win
 
 All clipped content is stored exclusively in `chrome.storage.local` on your own device. There is no account, no cloud sync, and no server — nothing about you or what you clip is ever sent to the developer. No analytics, no crash reports, no telemetry.
 
-One exception exists, and only to show you your own clips: when a clip contains images, the extension displays them by pointing your browser at each image's original web address. The site hosting that image therefore sees an ordinary image request, exactly as it would if you revisited the page it came from. These requests are sent with `no-referrer`, and no clip content, category, or other stored data is ever included. Image files are never downloaded or stored — only their URLs are saved.
+Your browser does make ordinary image requests to third-party hosts in three situations, all pointing at an image's original web address:
+
+1. **The library** shows the images in a clip.
+2. **The save panel** shows a preview thumbnail of an image clip.
+3. **The availability check** runs as the save panel opens — before you save — to find images that no longer load, so the export can mark them. Cancelling the save does not recall those requests.
+
+The host sees an ordinary image request, exactly as it would if you revisited the page the image came from. All three send `no-referrer`, and no clip content, tag, or other stored data is ever included. Image files are never downloaded or stored — only their URLs are saved.
+
+Full detail, including what each clip stores and what the 2.6.0 upgrade does to existing data: [privacy-policy.md](privacy-policy.md).
 
 You can delete individual clips or all clips at any time via the library interface, or remove the extension to erase all stored data.
 
