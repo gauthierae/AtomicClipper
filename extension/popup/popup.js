@@ -23,7 +23,7 @@ document.getElementById('start-clipping').addEventListener('click', async () => 
       });
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ['content/extractor.js', 'content/picker.js']
+        files: ['content/extractor.js', 'content/picker-ui.js', 'content/picker.js']
       });
     } catch (err) {
       console.error('[Atomic Clipper] Injection failed:', err);
@@ -41,7 +41,7 @@ document.getElementById('clip-article').addEventListener('click', async () => {
       await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content/picker.css'] });
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/extractor.js'] });
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window._atomicClipperAutoClip = true; } });
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/picker.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/picker-ui.js', 'content/picker.js'] });
     } catch (err) {
       console.error('[Atomic Clipper] Auto-clip failed:', err);
       show('state-unsupported');

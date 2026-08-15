@@ -1,3 +1,11 @@
+/* Page-scope styles only.
+ *
+ * Both rules below target PAGE elements — the element under the cursor and the green flash on an
+ * accumulated pick. A shadow root cannot style nodes outside itself, so these can never move into
+ * the picker's shadow tree (sprint-23.md §1 F2). Everything else that used to live in this file —
+ * tray, save panel, toast, hint — now lives in the shadow style sheet in picker-ui.js.
+ */
+
 /* Highlight frame — outline avoids layout shift */
 .atomic-clipper-highlight {
   outline: 2px solid #0a66c2 !important;
@@ -9,91 +17,4 @@
 .atomic-clipper-added {
   outline: 2px solid #1a7f37 !important;
   outline-offset: 2px !important;
-}
-
-/* Pending-blocks tray — mirrors #atomic-clipper-panel, narrower */
-#atomic-clipper-tray {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  width: 240px;
-  z-index: 2147483647;
-  background: #fff;
-  border: 1px solid #0a66c2;
-  border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  padding: 14px;
-  box-sizing: border-box;
-}
-
-#atomic-clipper-tray * {
-  box-sizing: border-box;
-  font-family: system-ui, sans-serif;
-}
-
-/* Inline save panel */
-#atomic-clipper-panel {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  width: 320px;
-  z-index: 2147483647;
-  background: #fff;
-  border: 1px solid #0a66c2;
-  border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  padding: 16px;
-  box-sizing: border-box;
-}
-
-#atomic-clipper-panel * {
-  box-sizing: border-box;
-  font-family: system-ui, sans-serif;
-}
-
-#atomic-clipper-panel img {
-  display: block;
-  max-width: 100%;
-}
-
-/* Success toast */
-#atomic-clipper-toast,
-#atomic-clipper-nav-toast {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  background: #0a66c2;
-  color: #fff;
-  padding: 10px 18px;
-  border-radius: 6px;
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  z-index: 2147483647;
-  opacity: 1;
-  transition: opacity 0.4s ease;
-  pointer-events: none;
-}
-
-/* Navigation cancellation toast — orange distinguishes from blue success toast */
-#atomic-clipper-nav-toast {
-  background: #e65100;
-}
-
-/* Selection fallback hint — persistent (no fade-out); stays until save panel or cleanup */
-#atomic-clipper-select-hint {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  background: #0a66c2;
-  color: #fff;
-  padding: 10px 18px;
-  border-radius: 6px;
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  z-index: 2147483647;
-  pointer-events: none;
 }
