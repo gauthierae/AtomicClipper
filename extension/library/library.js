@@ -52,10 +52,12 @@ async function copyClipMd(clip, btn) {
 function buildThumb(url) {
   const img = document.createElement('img');
   img.className = 'clip-thumb';
-  img.src = url;
+  // referrerPolicy BEFORE src: the published privacy policy asserts no-referrer on this
+  // request path, so the ordering must not depend on microtask timing.
+  img.referrerPolicy = 'no-referrer';
   img.alt = '';
   img.loading = 'lazy';
-  img.referrerPolicy = 'no-referrer';
+  img.src = url;
   img.addEventListener('error', () => {
     let fallback;
     if (isHttpUrl(url)) {
