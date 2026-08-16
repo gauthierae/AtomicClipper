@@ -31,6 +31,43 @@
       }
     }
 
+    // Only these may become a Markdown link target. A `javascript:` href is inert everywhere the
+    // extension displays a clip (library assigns text with textContent), so the risk is the exported
+    // .md reaching renderers we do not control — the same reasoning that omits SVG at the export
+    // boundary in markdown.js.
+    const LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+
+    const LINK_URL_ESCAPES = {
+      '(': '%28', ')': '%29', '[': '%5B', ']': '%5D', '<': '%3C', '>': '%3E', ' ': '%20'
+    };
+
+    function isAllowedLinkUrl(url) {
+      try {
+        return LINK_SCHEMES.has(new URL(url).protocol);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    // A page-controlled href can otherwise inject arbitrary Markdown into the export, and a remote
+    // `![]()` smuggled in that way becomes a tracking pixel the moment the note opens in the user's
+    // vault. Same threat class as ENH-20-01 (title) and the Sprint 21 asset-URL fix.
+    //
+    // `(` matters as much as `)`, which is the part that is easy to get wrong. Encoding only `)`
+    // leaves an unbalanced `(` in the destination; CommonMark then abandons the link, emits it as
+    // literal text, and parses the attacker's `![](…)` out of that text as a real image. Escaping
+    // both keeps the whole payload inside one destination, where it renders as an inert link.
+    // Verified against a CommonMark renderer, not by string comparison — see LINK_URL_ESCAPES users.
+    function sanitizeLinkUrl(url) {
+      return url.replace(/[\r\n]+/g, '').replace(/[()[\]<> ]/g, c => LINK_URL_ESCAPES[c]);
+    }
+
+    // `]` closes the label early and lets the rest of it escape into document context. Backslash is
+    // the CommonMark escape, so a legitimate label like "[PDF] Report" still renders as written.
+    function sanitizeLinkLabel(label) {
+      return label.replace(/[[\]]/g, '\\$&');
+    }
+
     function pushAsset(url) {
       const resolved = resolveUrl(url);
       if (!resolved) return;                          // empty candidate — nothing to count
@@ -108,11 +145,14 @@
           return Array.from(node.childNodes).map(walk).join('');
 
         case 'a': {
-          const href = node.getAttribute('href') || '';
           // Recurse children (not innerText) so a nested <img> reaches assets[]
           // instead of being silently dropped by the link short-circuit.
-          const label = Array.from(node.childNodes).map(walk).join('').trim();
-          return '[' + label + '](' + href + ')';
+          const label = sanitizeLinkLabel(Array.from(node.childNodes).map(walk).join('').trim());
+          const href = resolveUrl(node.getAttribute('href'));
+          // Fail closed, and degrade to the label rather than dropping it: the clip keeps the words
+          // the reader saw on the page, minus a target we cannot vouch for.
+          if (!isAllowedLinkUrl(href)) return label;
+          return '[' + label + '](' + sanitizeLinkUrl(href) + ')';
         }
 
         case 'strong':
