@@ -23,14 +23,22 @@ function isSvgDataUri(url) {
 }
 
 // `)` breaks out of ![]() mid-line; a newline breaks out to a new Markdown block — same threat class
-// as the title fix (ENH-20-01). Post-Sprint-21 captures cannot reach here with either character
-// (the scheme filter drops anything new URL() rejects, and the parser encodes the rest), so this
-// guards clips already in storage from before that filter existed. Spaces likewise.
+// as the title fix (ENH-20-01). This also guards clips already in storage from before the Sprint 21
+// scheme filter existed.
+//
+// `(` is escaped for the same reason as `)`, and leaving it out was the hole in the original version
+// of this function. Encoding only `)` leaves an unbalanced `(` in the destination; CommonMark then
+// abandons the image, emits it as literal text, and parses an attacker's `![](…)` out of that text
+// as a real image — a tracking pixel in the user's vault. Verified against a CommonMark renderer.
+// A legitimate URL with balanced parens (Wikipedia titles) still resolves; it only looks encoded.
+const ASSET_URL_ESCAPES = {
+  '(': '%28', ')': '%29', '[': '%5B', ']': '%5D', '<': '%3C', '>': '%3E', ' ': '%20'
+};
+
 function sanitizeAssetUrl(url) {
   return String(url)
     .replace(/[\r\n]+/g, '')
-    .replace(/\)/g, '%29')
-    .replace(/ /g, '%20');
+    .replace(/[()[\]<> ]/g, c => ASSET_URL_ESCAPES[c]);
 }
 
 // Only http(s) URLs are safe to use as a clickable href in the privileged
