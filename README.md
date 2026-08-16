@@ -8,8 +8,6 @@ Atomic Clipper is a Chrome extension. It captures web content into a library ins
 
 **Source build: 2.6.4** (this repo) · the [Chrome Web Store](https://chromewebstore.google.com/detail/atomic-clipper/dolcnaamlhbbdigmggnlikcdpdjjiadp) build can be older
 
-![Demo](assets/Atomic-Clipper-MiniDemo.gif)
-
 ## What it does
 
 - Point at an element on any webpage, then clip it with one click
