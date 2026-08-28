@@ -1,2 +1,7 @@
 # Build artifact produced for Chrome Web Store submission (see WORKFLOW.md).
 extension.zip
+
+# assets/ is private — PO decision 2026-08-27 (private repo decisions.md).
+# The folder holds store screenshots, pre-crop originals and duplicate takes.
+# Publishing one asset is an explicit PO call, one file at a time.
+assets/
